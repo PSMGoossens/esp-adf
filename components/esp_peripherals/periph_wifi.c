@@ -40,6 +40,7 @@
 #include "periph_wifi.h"
 #include "esp_peripherals.h"
 #include "wifibleconfig.h"
+#include "esp_wpa2.h" //wpa2 library for connections to Enterprise networks																		   
 
 static const char *TAG = "PERIPH_WIFI";
 
@@ -59,6 +60,7 @@ struct periph_wifi {
     uint8_t max_recon_time;
     char *ssid;
     char *password;
+	char *identity;			
     EventGroupHandle_t state_event;
     int reconnect_timeout_ms;
     periph_wifi_config_mode_t config_mode;
@@ -300,13 +302,23 @@ static esp_err_t _wifi_init(esp_periph_handle_t self)
     if (periph_wifi->ssid) {
         strcpy((char *)wifi_config.sta.ssid, periph_wifi->ssid);
         ESP_LOGD(TAG, "WIFI_SSID=%s", wifi_config.sta.ssid);
-        if (periph_wifi->password) {
+		if (periph_wifi->identity) {
+			esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)periph_wifi->identity, strlen(periph_wifi->identity)); //provide identity
+			esp_wifi_sta_wpa2_ent_set_username((uint8_t *)periph_wifi->identity, strlen(periph_wifi->identity)); //provide username --> identity and username is same
+			esp_wifi_sta_wpa2_ent_set_password((uint8_t *)periph_wifi->password, strlen(periph_wifi->password)); //provide password
+		} else if (periph_wifi->password) {
             strcpy((char *)wifi_config.sta.password, periph_wifi->password);
             ESP_LOGD(TAG, "WIFI_PASS=%s", wifi_config.sta.password);
         }
         ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+		if (periph_wifi->identity) {
+			ESP_LOGE(TAG, "WIFI_IDENTITY=%s", periph_wifi->identity);
+			esp_wpa2_config_t config; // = WPA2_CONFIG_INIT_DEFAULT(); //set config settings to default
+			config.crypto_funcs = &g_wifi_default_wpa2_crypto_funcs;
+			ESP_ERROR_CHECK(esp_wifi_sta_wpa2_ent_enable(&config)); //set config settings to enable function
+		}					  																						   
     }
     ESP_ERROR_CHECK(esp_wifi_start());
     periph_wifi->is_open = true;
@@ -327,6 +339,7 @@ static esp_err_t _wifi_destroy(esp_periph_handle_t self)
     esp_wifi_deinit();
     free(periph_wifi->ssid);
     free(periph_wifi->password);
+	free(periph_wifi->identity);						 
 
     vEventGroupDelete(periph_wifi->state_event);
     free(periph_wifi);
@@ -344,6 +357,7 @@ esp_periph_handle_t periph_wifi_init(periph_wifi_cfg_t *config)
             (periph_wifi = calloc(1, sizeof(struct periph_wifi))) &&
             (periph_wifi->state_event = xEventGroupCreate()) &&
             (config->ssid ? (bool)(periph_wifi->ssid = strdup(config->ssid)) : true) &&
+			(config->identity ? (bool)(periph_wifi->identity = strdup(config->identity)) : true) &&																			  
             (config->password ? (bool)(periph_wifi->password = strdup(config->password)) : true)
         );
 
@@ -365,6 +379,7 @@ _periph_wifi_init_failed:
         vEventGroupDelete(periph_wifi->state_event);
         free(periph_wifi->ssid);
         free(periph_wifi->password);
+		free(periph_wifi->identity);				  
         free(periph_wifi);
     }
     return NULL;

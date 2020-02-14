@@ -68,6 +68,7 @@ typedef struct {
     int     reconnect_timeout_ms;     /*!< The reconnect timeout after disconnected from Wi-Fi network */
     const   char *ssid;               /*!< SSID of target AP */
     const   char *password;           /*!< password of target AP */
+	const	char *identity;			  /*!< WPA2 Enterprise AP */
 } periph_wifi_cfg_t;
 
 /**
